@@ -53,18 +53,23 @@ openlxl/
 
 ### 作为 DSH agent preset 使用
 
-1. 把本仓库复制到 DSH 的 agent presets 目录（每个 preset 一个目录）：
+前置条件：已安装 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) 与 Python ≥ 3.10。
+
+1. 把本仓库克隆到 DSH 的 agent presets 目录（每个 preset 一个目录，目录名 `openlxl` 必须保留）：
 
    ```powershell
    # Windows
-   $preset = "$env:USERPROFILE\.dsh\.agent-presets\engstory"
-   New-Item -ItemType Directory -Force $preset
-   Copy-Item -Recurse .\* $preset\
+   git clone https://github.com/fanxzl/openlxl.git
+   Copy-Item -Recurse .\openlxl "$env:USERPROFILE\.dsh\.agent-presets\openlxl"
    ```
 
-   Linux/macOS 同理，目标为 `~/.dsh/.agent-presets/engstory/`。
+   ```bash
+   # Linux / macOS
+   git clone https://github.com/fanxzl/openlxl.git
+   cp -r openlxl ~/.dsh/.agent-presets/openlxl
+   ```
 
-2. 启动 DSH，用该 preset 新建会话（agent 自动获得 6 个工具 + 领域技能）。
+2. 启动 DSH，新建会话时选择 `openlxl` preset（agent 自动获得 6 个工具 + 领域技能）。
 
 3. 准备两个词库（路径由你自己指定，工具参数或环境变量传入）：
 
