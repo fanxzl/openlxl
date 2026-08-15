@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "marked": {}
+  },
+  "words": {
+    "crypt": {
+      "gloss": "地下室（尤指教堂下的）",
+      "picks": 3,
+      "last_pick": "2026-07-10T09:00:00",
+      "uses": 1,
+      "texts": 1,
+      "last_use": "2026-07-15T20:00:00",
+      "forms": [],
+      "不会频次": 2,
+      "card_id": 10001,
+      "state": 3,
+      "step": 0,
+      "stability": 0.8,
+      "difficulty": 6.3,
+      "due": "2026-07-20T09:00:00+00:00",
+      "last_review": "2026-07-15T09:00:00+00:00",
+      "forget_score": 62.5
+    },
+    "coffin": {
+      "gloss": "棺材",
+      "picks": 0,
+      "last_pick": null,
+      "uses": 0,
+      "texts": 0,
+      "last_use": null,
+      "forms": [],
+      "不会频次": 1,
+      "card_id": 10002,
+      "state": 1,
+      "step": 0,
+      "stability": null,
+      "difficulty": null,
+      "due": "2026-08-16T00:00:00+00:00",
+      "last_review": null,
+      "forget_score": 30.0
+    },
+    "tale|传说": {
+      "gloss": "传说",
+      "picks": 2,
+      "last_pick": "2026-08-15T09:00:00",
+      "uses": 1,
+      "texts": 1,
+      "last_use": "2026-08-15T20:00:00",
+      "forms": [],
+      "不会频次": 1,
+      "card_id": 10003,
+      "state": 2,
+      "step": null,
+      "stability": 15.2,
+      "difficulty": 3.1,
+      "due": "2026-08-30T09:00:00+00:00",
+      "last_review": "2026-08-15T09:00:00+00:00",
+      "forget_score": 4.8
+    }
+  }
+}

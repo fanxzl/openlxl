@@ -1,0 +1,19 @@
+{
+  "words": {
+    "castle": { "gloss": "城堡" },
+    "forest": { "gloss": "森林" },
+    "river": { "gloss": "河流" },
+    "village": { "gloss": "村庄" },
+    "night": { "gloss": "夜晚" },
+    "old": { "gloss": "老的" },
+    "big": { "gloss": "大的" },
+    "small": { "gloss": "小的" },
+    "walk": { "gloss": "走", "forms": ["walked", "walking"] },
+    "find": { "gloss": "发现", "forms": ["found"] },
+    "door": { "gloss": "门" },
+    "light": { "gloss": "光" },
+    "dark": { "gloss": "黑暗的" },
+    "hear": { "gloss": "听见", "forms": ["heard"] },
+    "noise": { "gloss": "噪音" }
+  }
+}

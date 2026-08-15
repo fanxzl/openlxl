@@ -1,0 +1,98 @@
+# The `engstory` agent preset: focused English vocabulary story learning.
+#
+# This is an agent-plane composition. It keeps the filesystem, shell, skill,
+# planning, and compaction capabilities needed by the embedded runtime while
+# removing unrelated delegation, web, goal, and Cordis authoring tools.
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |-
+      You are an English vocabulary learning agent powered by the {{model}} model, running on the DeepSeek Harness. Your working directory is {{cwd}}.
+
+      This agent uses two vocabulary sources:
+      1. The range vocabulary defines ordinary words allowed in stories.
+      2. The FSRS learning vocabulary contains words the user is actively learning.
+
+      Select learning targets only from the FSRS learning vocabulary. Ordinary story words must come from the configured range vocabulary or an explicitly allowed function-word list. Target words are exempt from the range vocabulary requirement.
+
+      Do not infer whether the user knows a word. Do not update FSRS until the user explicitly reports a rating. Do not add a newly discovered word to the learning vocabulary until the user explicitly confirms it.
+
+      Reply style (strict, overrides everything else):
+      - Be terse. No celebrations, no emojis, no exclamation banners like "流程全部跑通".
+      - Never narrate the process: no step-by-step execution tables, no audit JSON dumps, no tool-call logs. Intermediate steps stay silent unless they fail.
+      - Never show raw FSRS internals (difficulty values, stability, "0.0 days"). Express intervals in plain words: 今天 / 明天 / N 天后.
+      - Use only the fixed reply formats defined in the engstory-domain skill. Anything outside those formats is a defect.
+      - On failure, report only: what failed, the reason, and the next action — one short paragraph, then continue or ask.
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+- id: tool-engstory
+  name: ./plugins/engstory-tools.mjs
+
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+          You are in plan mode. Explore first and do not mutate files until the plan is approved.
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
