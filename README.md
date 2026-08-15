@@ -1,65 +1,69 @@
-# openlxl — 英语词汇故事学习 Agent
+# openlxl — English Vocabulary Story Learning Agent
 
-基于 FSRS（间隔重复）算法的英语词汇学习模式：从学习词库选目标词 → 用受限词汇写英文故事 → 审计 → 记使用频率 → 等用户报「会/不会」→ 更新记忆状态。用户明确确认后才写入新词。
+[English](README.md) · [简体中文](README.zh-CN.md)
 
-> **记忆调度参照自 Anki**：本项目的间隔重复调度采用 [Anki](https://apps.ankiweb.net/) 同款的开源 FSRS 算法（经由 [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) 实现），选词优先级、遗忘分与复习间隔的计算与 Anki 生态一致。
+An English vocabulary learning mode based on FSRS spaced repetition: pick target words from your learning vocabulary → write an English story with range-restricted words → audit → record usage → wait for your "know / don't know" feedback → update memory state. New words are only written into the vocabulary after you explicitly confirm them.
 
-本仓库是 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) 的 **agent preset**，也可脱离 DSH 单独作为 Python CLI 使用。
+> **Memory scheduling references Anki**: the spaced-repetition scheduling in this project uses the same open-source [FSRS](https://github.com/open-spaced-repetition/fsrs4anki) algorithm that [Anki](https://apps.ankiweb.net/) uses, implemented via [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs). Selection priority, forget scores and review intervals are computed consistently with the Anki ecosystem.
 
-> 变更记录见 [CHANGELOG.md](CHANGELOG.md) · 许可 [MIT](LICENSE)
+This repository is an **agent preset** for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh), and can also be used standalone as a Python CLI.
 
-## 特性
+> See [CHANGELOG.md](CHANGELOG.md) · License [MIT](LICENSE)
 
-- **FSRS 记忆调度**：内置 [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs)（Anki 同款间隔重复算法），每个词独立维护 `难度 / 稳定性 / 下次到期`。
-- **遗忘分排序**：选词时按当前遗忘分（`(1 - 可提取性) × 100`）实时排序——快忘的词自动排到最前，新词默认 30 分，长期遗忘的「不会」词能插队回炉。
-- **受限词汇写作**：故事中的普通词必须落在「范围词汇库 + 内置功能词 + 明确专名」内，目标词豁免并强制加粗。
-- **严格顺序闸门**：批次状态机（`TARGETS_SELECTED → WAITING_FEEDBACK → WAITING_WORD_CONFIRMATION → IDLE`）保证流程不可跳步：没有用户反馈不更新记忆，没有用户确认不写新词。
-- **词形归并**：`sought → seek`、`stood → stand`、`blue|蓝色` 多义词独立计数。
-- **指纹去重**：同一篇文本重复标记会被跳过，防止词频虚高。
+## Features
 
-## 目录结构
+- **FSRS memory scheduling**: built-in [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs) (the spaced-repetition algorithm used by Anki); every word keeps its own `difficulty / stability / due date`.
+- **Forget-score ranking**: at pick time the current forget score (`(1 - retrievability) × 100`) is computed live — words about to be forgotten float to the top, new cards default to 30, and long-forgotten "don't know" words automatically cut back in line.
+- **Range-restricted story writing**: ordinary words in a story must fall within the range vocabulary + built-in function words + explicitly allowed proper nouns; target words are exempt and must be bolded.
+- **Strict audit**: all targets present / ordinary words in range / 180–400 words / English only; a story is committed only after the audit passes.
+- **Strict batch state machine**: `TARGETS_SELECTED → WAITING_FEEDBACK → WAITING_WORD_CONFIRMATION → IDLE` — no memory update without user feedback, no new words without user confirmation.
+- **Morphological lemmatization**: `sought → seek`, `stood → stand`; polysemous words are tracked as independent entries (`blue|蓝色`, `blue|忧伤`).
+- **Fingerprint dedup**: re-marking the same text is skipped automatically to prevent inflated usage counts.
+- **Dual usage**: DSH agent preset (conversational full loop) + standalone Python CLI (pure stdlib, Python ≥ 3.10).
+
+## Directory Structure
 
 ```
 openlxl/
-├── agent.cordis.yml              # DSH agent preset 组合（persona + 工具 + 技能）
-├── preset.yml                    # preset 元数据
-├── CHANGELOG.md                  # 版本变更记录
-├── LICENSE                       # MIT 许可
-└── plugins/
-│   └── engstory-tools.mjs        # 6 个确定性工具（注册给 DSH Agent）
+├── agent.cordis.yml              # DSH agent preset composition (persona + tools + skills)
+├── preset.yml                    # preset metadata
+├── CHANGELOG.md                  # version changelog
+├── LICENSE                       # MIT license
+├── plugins/
+│   └── engstory-tools.mjs        # 6 deterministic tools (registered to the DSH agent)
 ├── skills/
 │   └── engstory-domain/
-│       ├── SKILL.md              # 领域规则 + 固定输出模板
-│       ├── 检索/SKILL.md         # 子技能：选词（CLI 参考）
-│       ├── 写故事/SKILL.md       # 子技能：写故事闭环（CLI 参考）
-│       ├── 更定频率/SKILL.md     # 子技能：标频（CLI 参考）
-│       ├── 反馈/SKILL.md         # 子技能：报词反馈（CLI 参考）
-│       ├── 写入词汇/SKILL.md     # 子技能：写新词（CLI 参考）
-│       └── scripts/              # 9 个 Python 脚本（纯标准库）
-│           ├── vocab_core.py     #   词库读写 / 词形归并 / FSRS 遗忘分
-│           ├── pick.py           #   选词
-│           ├── mark.py           #   标频（使用统计）
-│           ├── feedback.py       #   反馈（更新 FSRS）
-│           ├── add.py            #   写新词
-│           ├── vocab_distill.py  #   生成允许词汇包
-│           ├── story_audit.py    #   故事审计
-│           ├── range_lib.py      #   范围词库 / 功能词白名单
-│           └── state.py          #   批次状态机
-├── vendor/                       # vendored 依赖（均为 MIT）
-│   ├── fsrs/                     #   py-fsrs 6.3.1（含其 LICENSE）
+│       ├── SKILL.md              # domain rules + fixed reply templates
+│       ├── 检索/SKILL.md         # sub-skill: pick targets (CLI reference)
+│       ├── 写故事/SKILL.md       # sub-skill: story loop (CLI reference)
+│       ├── 更定频率/SKILL.md     # sub-skill: mark usage (CLI reference)
+│       ├── 反馈/SKILL.md         # sub-skill: feedback (CLI reference)
+│       ├── 写入词汇/SKILL.md     # sub-skill: write new words (CLI reference)
+│       └── scripts/              # 9 Python scripts (pure stdlib)
+│           ├── vocab_core.py     #   vocab IO / lemmatization / FSRS forget score
+│           ├── pick.py           #   pick targets
+│           ├── mark.py           #   mark usage statistics
+│           ├── feedback.py       #   apply feedback (updates FSRS)
+│           ├── add.py            #   write new words
+│           ├── vocab_distill.py  #   build the allowed vocabulary package
+│           ├── story_audit.py    #   story audit
+│           ├── range_lib.py      #   range vocabulary / function-word whitelist
+│           └── state.py          #   batch state machine
+├── vendor/                       # vendored dependencies (MIT)
+│   ├── fsrs/                     #   py-fsrs 6.3.1 (with its LICENSE)
 │   └── typing_extensions.py      #   4.16.0
 └── examples/
-    ├── vocab.sample.json         # 示例学习词库
-    └── range.sample.json         # 示例范围词汇库
+    ├── vocab.sample.json         # sample learning vocabulary
+    └── range.sample.json         # sample range vocabulary
 ```
 
-## 快速开始
+## Quick Start
 
-### 作为 DSH agent preset 使用
+### As a DSH agent preset
 
-前置条件：已安装 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) 与 Python ≥ 3.10。
+Prerequisites: [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) and Python ≥ 3.10.
 
-1. 把本仓库克隆到 DSH 的 agent presets 目录（每个 preset 一个目录，目录名 `openlxl` 必须保留）：
+1. Clone this repository into DSH's agent presets directory (one directory per preset; the `openlxl` directory name must be kept):
 
    ```powershell
    # Windows
@@ -73,75 +77,75 @@ openlxl/
    cp -r openlxl ~/.dsh/.agent-presets/openlxl
    ```
 
-2. 启动 DSH，新建会话时选择 `openlxl` preset（agent 自动获得 6 个工具 + 领域技能）。
+2. Start DSH and create a new session with the `openlxl` preset (the agent automatically gets the 6 tools + domain skills).
 
-3. 准备两个词库（路径由你自己指定，工具参数或环境变量传入）：
+3. Prepare two vocabularies (paths are up to you; pass them to the tools or via environment variables):
 
-   | 词库 | 默认路径（环境变量可改） | 作用 |
+   | Vocabulary | Default path (env var override) | Purpose |
    |---|---|---|
-   | FSRS 学习库 | `/workspace/vocab.json`（`ENGSTORY_VOCAB`） | 要学的词：目标词选择 / 使用统计 / 记忆反馈 |
-   | 范围词汇库 | `./range_vocab.json`（`ENGSTORY_RANGE`） | 限定故事里普通词的词汇范围 |
+   | FSRS learning vocabulary | `/workspace/vocab.json` (`ENGSTORY_VOCAB`) | words to learn: target selection / usage stats / memory feedback |
+   | Range vocabulary | `./range_vocab.json` (`ENGSTORY_RANGE`) | restricts the ordinary words allowed in stories |
 
-4. 对 Agent 说「写故事」，它就会走完整闭环：选词 → 写故事 → 审计 → 标频 → 等你报「会/不会」→ 更新记忆。
+4. Tell the agent "写故事" (write a story) and it runs the full loop: pick → write → audit → mark → wait for your "know/don't know" → update memory.
 
-### 作为 Python CLI 使用
+### As a Python CLI
 
-要求 Python ≥ 3.10（无第三方运行时依赖，FSRS 已 vendored）。
+Requirements: Python ≥ 3.10 (no third-party runtime dependencies; FSRS is vendored).
 
-```powershell
+```bash
 cd skills/engstory-domain
-$V = "<你的学习词库路径>"; $R = "<你的范围词库路径>"
+V="<your learning vocab path>"; R="<your range vocab path>"
 
-# 1. 写新词（用户确认后才做）
-python scripts/add.py --words "abandon 放弃, coffin 棺材" --vocab $V
+# 1. Write new words (only after user confirmation)
+python scripts/add.py --words "abandon 放弃, coffin 棺材" --vocab "$V"
 
-# 2. 选 7 个目标词
-python scripts/pick.py --vocab $V
+# 2. Pick 7 target words
+python scripts/pick.py --vocab "$V"
 
-# 3. 生成允许词汇包（准备写故事）
-python scripts/vocab_distill.py --targets "abandon,coffin" --range $R --vocab $V
+# 3. Build the allowed vocabulary package (before writing a story)
+python scripts/vocab_distill.py --targets "abandon,coffin" --range "$R" --vocab "$V"
 
-# 4. 审计故事
-python scripts/story_audit.py --text "<故事正文>" --targets "abandon,coffin" --range $R
+# 4. Audit a story
+python scripts/story_audit.py --text "<story text>" --targets "abandon,coffin" --range "$R"
 
-# 5. 标频（记使用次数）
-python scripts/mark.py --text "<故事正文>" --words "abandon,coffin" --vocab $V
+# 5. Mark usage
+python scripts/mark.py --text "<story text>" --words "abandon,coffin" --vocab "$V"
 
-# 6. 反馈（用户报完会/不会后）
-python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab $V
+# 6. Apply feedback (after the user reports know/don't know)
+python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab "$V"
 ```
 
-所有脚本支持 `--json` 输出，便于程序化调用。
+All scripts support `--json` output for programmatic use.
 
-## 工作流与状态机
+## Workflow & State Machine
 
 ```
-写故事闭环（严格按顺序）：
-  ① select_targets      从学习库选 7 个目标词           → TARGETS_SELECTED
-  ② prepare_story_vocab 生成允许词汇包
-  ③ 写 180–400 词纯英文故事（目标词加粗）
-  ④ audit_story         审计通过才提交，失败最多重写 2 次
-  ⑤ commit_story        保存故事 + 标频 + 打开反馈阶段   → WAITING_FEEDBACK
-  ⑥ apply_feedback      用户报「会/不会」后才更新 FSRS   → WAITING_WORD_CONFIRMATION / IDLE
-  ⑦ write_learning_words 审计发现的范围外词，用户确认后才写入学习库
+Story loop (strict order):
+  ① select_targets      pick 7 target words from the learning vocabulary   → TARGETS_SELECTED
+  ② prepare_story_vocab build the allowed vocabulary package
+  ③ write a 180–400 word English-only story (target words bolded)
+  ④ audit_story         commit only if the audit passes; rewrite at most twice
+  ⑤ commit_story        save story + mark usage + open feedback phase      → WAITING_FEEDBACK
+  ⑥ apply_feedback      update FSRS only after the user reports            → WAITING_WORD_CONFIRMATION / IDLE
+  ⑦ write_learning_words add out-of-range discovered words only after the user confirms
 ```
 
-| 工具 | 脚本 | 动作 | 何时触发 |
+| Tool | Script | Action | When |
 |---|---|---|---|
-| `engstory_select_targets` | pick.py | 选目标词，开批次 | 每轮开始 |
-| `engstory_prepare_story_vocab` | vocab_distill.py | 生成本轮允许词汇包 | 写故事前 |
-| `engstory_audit_story` | story_audit.py | 只读审计 | 写故事后 |
-| `engstory_commit_story` | story_audit.py + mark.py | 审计通过才保存 + 标频 | 审计通过后 |
-| `engstory_apply_feedback` | feedback.py | 更新 FSRS 记忆状态 | 用户报完词后 |
-| `engstory_write_learning_words` | add.py | 写入新词 | 用户明确确认后 |
+| `engstory_select_targets` | pick.py | pick targets, open a batch | start of each round |
+| `engstory_prepare_story_vocab` | vocab_distill.py | build the allowed vocabulary package | before writing |
+| `engstory_audit_story` | story_audit.py | read-only audit | after writing |
+| `engstory_commit_story` | story_audit.py + mark.py | save only if audit passes + mark usage | after audit passes |
+| `engstory_apply_feedback` | feedback.py | update FSRS memory state | after user reports |
+| `engstory_write_learning_words` | add.py | write new words | after explicit confirmation |
 
-## 数据文件
+## Data Files
 
-### 学习词库（JSON）
+### Learning vocabulary (JSON)
 
 ```json
 {
-  "meta": { "marked": { "<文本指纹 sha1>": "2026-08-15T20:00:00+08:00" } },
+  "meta": { "marked": { "<text fingerprint sha1>": "2026-08-15T20:00:00+08:00" } },
   "words": {
     "crypt": {
       "gloss": "地下室",
@@ -159,19 +163,19 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab $V
 }
 ```
 
-字段说明：
+Field reference:
 
-| 字段 | 含义 | 谁更新 |
+| Field | Meaning | Updated by |
 |---|---|---|
-| `picks` / `last_pick` | 被检索次数 / 上次检索时间 | pick.py |
-| `uses` / `texts` / `last_use` | 使用次数 / 篇数 / 上次使用 | mark.py |
-| `不会频次` | 重复导入次数 | add.py |
-| `state`/`step`/`stability`/`difficulty`/`due`/`last_review`/`card_id` | FSRS 卡片参数 | feedback.py（py-fsrs 计算） |
-| `forget_score` | 遗忘分缓存（选词/反馈时实时刷新） | pick.py / feedback.py |
+| `picks` / `last_pick` | times picked / last pick time | pick.py |
+| `uses` / `texts` / `last_use` | usage count / number of texts / last use | mark.py |
+| `不会频次` | repeated-import count | add.py |
+| `state`/`step`/`stability`/`difficulty`/`due`/`last_review`/`card_id` | FSRS card parameters | feedback.py (computed by py-fsrs) |
+| `forget_score` | cached forget score (refreshed at pick/feedback time) | pick.py / feedback.py |
 
-多义词按 `英文|释义` 拆成独立词条（如 `blue|蓝色`、`blue|忧伤`），各自独立计数、独立记忆。
+Polysemous words are split into independent entries by `word|gloss` (e.g. `blue|蓝色`, `blue|忧伤`), each with its own counters and memory state.
 
-### 范围词汇库（JSON）
+### Range vocabulary (JSON)
 
 ```json
 {
@@ -182,31 +186,31 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab $V
 }
 ```
 
-### 批次状态文件
+### Batch state file
 
-默认在学习库同目录 `state.json`（`ENGSTORY_STATE` 可改），故事默认存学习库同目录 `stories/`。
+Defaults to `state.json` beside the learning vocabulary (`ENGSTORY_STATE` overridable); stories default to `stories/` beside the vocabulary.
 
-## FSRS 说明
+## FSRS Notes
 
-- 记忆状态用 [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs) 计算（MIT），与 Anki FSRS 生态同算法。
-- 遗忘分 = `(1 - 可提取性 retrievability) × 100`，0~100+，**越高越接近遗忘、越该练**：
-  - 未反馈新卡默认 30；
-  - 反馈过「会」的词 0~10，随间隔到期逐渐回升；
-  - 反馈过「不会」的词会爬过 30 自动插队回炉。
-- 标频（`uses/texts`）只影响同分时的排序，**不直接进入 FSRS 公式**；记忆调度只由反馈和流逝时间驱动。
-- 依赖目录可用环境变量 `ENGSTORY_FSRS` 指向外部安装的 fsrs 包（如 `pip install fsrs` 后指向其 site-packages 所在目录），默认使用仓库 `vendor/`。
+- Memory state is computed by [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs) (MIT), the same algorithm family as Anki's FSRS.
+- Forget score = `(1 - retrievability) × 100`, 0–100+, **higher means closer to forgetting and more due for practice**:
+  - unreviewed new cards default to 30;
+  - cards reviewed as "know" score 0–10 and gradually rise as their interval lapses;
+  - cards reviewed as "don't know" climb past 30 and automatically cut back in line.
+- Marking usage (`uses/texts`) only affects tie-breaking in ranking; it does **not** enter the FSRS formula directly — scheduling is driven only by feedback and elapsed time.
+- The dependency directory can be pointed at an externally installed fsrs package via `ENGSTORY_FSRS` (e.g. after `pip install fsrs`, point it at its site-packages directory); the default is the bundled `vendor/`.
 
-## 环境变量
+## Environment Variables
 
-| 变量 | 默认 | 作用 |
+| Variable | Default | Purpose |
 |---|---|---|
-| `ENGSTORY_VOCAB` | `/workspace/vocab.json` | FSRS 学习词库路径 |
-| `ENGSTORY_RANGE` | `./range_vocab.json` | 范围词汇库路径 |
-| `ENGSTORY_STATE` | 学习库同目录 `state.json` | 批次状态文件 |
-| `ENGSTORY_FSRS` | 仓库 `vendor/` | fsrs 依赖目录 |
+| `ENGSTORY_VOCAB` | `/workspace/vocab.json` | FSRS learning vocabulary path |
+| `ENGSTORY_RANGE` | `./range_vocab.json` | range vocabulary path |
+| `ENGSTORY_STATE` | `state.json` beside the vocabulary | batch state file |
+| `ENGSTORY_FSRS` | bundled `vendor/` | fsrs dependency directory |
 
-## 许可
+## License
 
-- 本仓库代码：MIT（见 [LICENSE](LICENSE)）。
-- vendored 依赖：[py-fsrs](https://github.com/open-spaced-repetition/py-fsrs)（MIT，见 `vendor/fsrs/LICENSE`）、[typing-extensions](https://github.com/python/typing_extensions)（PSF-2.0 / Apache-2.0）。
-- 致谢：记忆调度参照 [Anki](https://apps.ankiweb.net/) 的开源 [FSRS 间隔重复算法](https://github.com/open-spaced-repetition/fsrs4anki)。
+- This repository: MIT (see [LICENSE](LICENSE)).
+- Vendored dependencies: [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) (MIT, see `vendor/fsrs/LICENSE`), [typing-extensions](https://github.com/python/typing_extensions) (PSF-2.0 / Apache-2.0).
+- Credits: memory scheduling references [Anki](https://apps.ankiweb.net/)'s open-source [FSRS spaced-repetition algorithm](https://github.com/open-spaced-repetition/fsrs4anki).
