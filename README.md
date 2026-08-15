@@ -6,6 +6,8 @@
 
 本仓库是 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) 的 **agent preset**，也可脱离 DSH 单独作为 Python CLI 使用。
 
+> 变更记录见 [CHANGELOG.md](CHANGELOG.md) · 许可 [MIT](LICENSE)
+
 ## 特性
 
 - **FSRS 记忆调度**：内置 [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs)（Anki 同款间隔重复算法），每个词独立维护 `难度 / 稳定性 / 下次到期`。
@@ -21,7 +23,9 @@
 openlxl/
 ├── agent.cordis.yml              # DSH agent preset 组合（persona + 工具 + 技能）
 ├── preset.yml                    # preset 元数据
-├── plugins/
+├── CHANGELOG.md                  # 版本变更记录
+├── LICENSE                       # MIT 许可
+└── plugins/
 │   └── engstory-tools.mjs        # 6 个确定性工具（注册给 DSH Agent）
 ├── skills/
 │   └── engstory-domain/
