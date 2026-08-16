@@ -266,6 +266,49 @@ def memory_score(entry: dict, now=None) -> float:
         return 30.0
 
 
+def parse_due(entry: dict, now=None):
+    """从词条平铺字段读 due（ISO 字符串）→ aware datetime；缺失/损坏返回 None。
+
+    naive 时间一律按 UTC 处理（与存储侧 now_iso 保持一致），避免 ago/相减崩溃。
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    raw = entry.get("due") if isinstance(entry, dict) else None
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        return None
+
+
+def fmt_interval(td) -> str:
+    """把 timedelta 转成自然语言（禁止露出 0.0 天这类 FSRS 内部数字）。
+
+    规则：<1 分钟 → 即将到期；<60 分钟 → 约 X 分钟后；<24 小时 → 约 X 小时后；
+    <48 小时 → 明天；否则 N 天后。负数一律视为已逾期。
+    """
+    if td is None:
+        return "很快"
+    total_min = td.total_seconds() / 60.0
+    if total_min <= 0:
+        return "已逾期"
+    if total_min < 1:
+        return "即将到期"
+    if total_min < 60:
+        return f"约 {int(total_min)} 分钟后"
+    total_h = total_min / 60.0
+    if total_h < 24:
+        return f"约 {int(total_h)} 小时后"
+    total_d = total_h / 24.0
+    if total_d < 2:
+        return "明天"
+    return f"{round(total_d)} 天后"
+
+
 def new_entry(gloss: str = "") -> dict:
     """一个词的完整字段，包含统计字段与 FSRS 新卡参数。"""
     # 与 py-fsrs Card() 的新卡结构保持一致；card_id 用微秒级时间生成，

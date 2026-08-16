@@ -28,13 +28,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 for _fsrs_cand in (
     os.environ.get("ENGSTORY_FSRS"),                            # 显式指定 fsrs 依赖目录
     str(Path(__file__).resolve().parents[3] / "vendor"),        # 仓库内置 vendor/
+    str(Path(__file__).resolve().parents[3] / "fsrs_pkg"),      # 旧布局 fsrs_pkg/
 ):
     if _fsrs_cand and Path(_fsrs_cand).is_dir():
         sys.path.insert(0, _fsrs_cand)
         break
 
 from vocab_core import (  # noqa: E402
-    DEFAULT_VOCAB, load, memory_score, now_iso, save, split_key,
+    DEFAULT_VOCAB, fmt_interval, load, memory_score, now_iso, save, split_key,
 )
 from fsrs import Card, Rating, Scheduler  # noqa: E402
 
@@ -142,11 +143,11 @@ def main() -> int:
                 e[kk] = vv
             e.pop("fsrs", None)               # 清理旧嵌套格式
             e["forget_score"] = memory_score(e, now)   # 遗忘分常驻，一并刷新
-            days = max(0.0, (new_card.due - now).total_seconds() / 86400)
+            interval = fmt_interval(new_card.due - now)   # 自然语言到期文案
             updated.append({
                 "key": feedback_ref(k, words),
                 "rating": rating.name,
-                "due_in_days": round(days, 1),
+                "due_in": interval,               # 例如：约 1 分钟后 / 明天 / 5 天后
                 "difficulty": round(new_card.difficulty, 3),
                 "stability": round(new_card.stability, 3),
             })
@@ -164,7 +165,7 @@ def main() -> int:
     if updated:
         print(f"已更新 {len(updated)} 个词条的记忆状态：")
         for u in updated:
-            print(f"  {u['key']}  [{u['rating']}]  下次约 {u['due_in_days']} 天后  难度 {u['difficulty']}")
+            print(f"  {u['key']}  [{u['rating']}]  下次 {u['due_in']}  难度 {u['difficulty']}")
     if ambiguous:
         print("多义词标识不明确，请使用 英文|释义：" + "、".join(ambiguous))
     if missing:

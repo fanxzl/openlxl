@@ -43,8 +43,8 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab "<词库
 
 ```
 已更新 2 个词条的记忆状态：
-  abandon  [Good]  下次约 5.2 天后  难度 2.118
-  coffin   [Again] 下次约 0.0 天后  难度 5.118
+  abandon  [Good]  下次 5 天后  难度 2.118
+  coffin   [Again] 下次 约 10 分钟后  难度 5.118
 词库没有，跳过：seek
 ```
 
@@ -53,7 +53,7 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab "<词库
 ## 它做了什么（自动）
 
 - 每个词条维护一套 FSRS 记忆状态（难度、稳定性、下次到期），由 py-fsrs 算法计算（MIT 开源，行业标杆间隔重复算法）
-- 反馈一次，状态更新一次；"不会"的词难度上升、很快再出现在检索里，"会"的词间隔拉长
+- 反馈一次，状态更新一次；"不会"的词难度上升、下次到期只剩几分钟，下一轮检索**必现**在第一位，"会"的词间隔拉长、沉到后面休息
 - 词条没有记忆状态时自动按"新卡"起步（立即到期）
 - **不碰** picks/uses/texts 那些统计字段（那是检索/更定频率的事）
 
