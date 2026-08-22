@@ -16,6 +16,10 @@ This repository is an **agent preset** for [DeepSeek Harness (DSH)](https://gith
 - **Forget-score ranking**: at pick time the current forget score (`(1 - retrievability) × 100`) is computed live — words about to be forgotten float to the top, new cards default to 30, and long-forgotten "don't know" words automatically cut back in line.
 - **Range-restricted story writing**: ordinary words in a story must fall within the range vocabulary + built-in function words + explicitly allowed proper nouns; target words are exempt and must be bolded.
 - **Strict audit**: all targets present / ordinary words in range / 180–400 words / English only; a story is committed only after the audit passes.
+- **Layered long-form memory**: a chapter fact ledger (`chapter-ledger.jsonl`) records per-chapter facts, character/relationship changes, thread changes and consequences; a volume/story-arc outline (`plot-outline.json`) keeps the long-term direction, with a deterministic conflict detector that flags "did come" vs "never came" contradictions.
+- **Extractable, confirmable style**: a style profile (`style-profile.json`) holds dimensions / must-do / avoid / confidence; candidate styles are extracted from reference fragments + reader impressions and only persisted after you confirm (`engstory_extract_style` → `engstory_confirm_style`) — never auto-overwritten.
+- **On-demand context assembly**: `engstory_build_context` merges style + plot outline + facts + current state + target words into a single bounded writing-context package.
+- **Dramatic chapter structure**: each chapter is required to complete "scene entry → chapter goal → obstacle → choice → consequence → concrete hook", with hard negative constraints (no repeated weather openings, no random new characters, no empty suspense, no dream explanations).
 - **Strict batch state machine**: `TARGETS_SELECTED → WAITING_FEEDBACK → WAITING_WORD_CONFIRMATION → IDLE` — no memory update without user feedback, no new words without user confirmation.
 - **Morphological lemmatization**: `sought → seek`, `stood → stand`; polysemous words are tracked as independent entries (`blue|蓝色`, `blue|忧伤`).
 - **Fingerprint dedup**: re-marking the same text is skipped automatically to prevent inflated usage counts.
@@ -30,7 +34,7 @@ openlxl/
 ├── CHANGELOG.md                  # version changelog
 ├── LICENSE                       # MIT license
 ├── plugins/
-│   └── engstory-tools.mjs        # 6 deterministic tools (registered to the DSH agent)
+│   └── engstory-tools.mjs        # 9 deterministic tools (registered to the DSH agent)
 ├── skills/
 │   └── engstory-domain/
 │       ├── SKILL.md              # domain rules + fixed reply templates
@@ -39,16 +43,21 @@ openlxl/
 │       ├── 更定频率/SKILL.md     # sub-skill: mark usage (CLI reference)
 │       ├── 反馈/SKILL.md         # sub-skill: feedback (CLI reference)
 │       ├── 写入词汇/SKILL.md     # sub-skill: write new words (CLI reference)
-│       └── scripts/              # 9 Python scripts (pure stdlib)
+│       └── scripts/              # 14 Python scripts (pure stdlib)
 │           ├── vocab_core.py     #   vocab IO / lemmatization / FSRS forget score
-│           ├── pick.py           #   pick targets
+│           ├── pick.py           #   pick targets (due-driven four queues)
 │           ├── mark.py           #   mark usage statistics
 │           ├── feedback.py       #   apply feedback (updates FSRS)
 │           ├── add.py            #   write new words
 │           ├── vocab_distill.py  #   build the allowed vocabulary package
 │           ├── story_audit.py    #   story audit
 │           ├── range_lib.py      #   range vocabulary / function-word whitelist
-│           └── state.py          #   batch state machine
+│           ├── state.py          #   batch state machine
+│           ├── storyline.py      #   continuous storyline state (premise / threads / chapter / consequence)
+│           ├── ledger.py         #   per-chapter fact ledger (with conflict detection)
+│           ├── outline.py        #   volume / story-arc outline
+│           ├── style.py          #   style profile (load / extract / confirm / context)
+│           └── context.py        #   assemble the bounded writing-context package
 ├── vendor/                       # vendored dependencies (MIT)
 │   ├── fsrs/                     #   py-fsrs 6.3.1 (with its LICENSE)
 │   └── typing_extensions.py      #   4.16.0
@@ -67,17 +76,17 @@ Prerequisites: [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) and 
 
    ```powershell
    # Windows
-   git clone https://github.com/fanxzl/openlxl.git
+   git clone https://github.com/fanxzl/openlxl-dsh.git
    Copy-Item -Recurse .\openlxl "$env:USERPROFILE\.dsh\.agent-presets\openlxl"
    ```
 
    ```bash
    # Linux / macOS
-   git clone https://github.com/fanxzl/openlxl.git
+   git clone https://github.com/fanxzl/openlxl-dsh.git
    cp -r openlxl ~/.dsh/.agent-presets/openlxl
    ```
 
-2. Start DSH and create a new session with the `openlxl` preset (the agent automatically gets the 6 tools + domain skills).
+2. Start DSH and create a new session with the `openlxl` preset (the agent automatically gets the 9 tools + domain skills).
 
 3. Prepare two vocabularies (paths are up to you; pass them to the tools or via environment variables):
 
@@ -122,22 +131,26 @@ All scripts support `--json` output for programmatic use.
 ```
 Story loop (strict order):
   ① select_targets      pick 7 target words from the learning vocabulary   → TARGETS_SELECTED
-  ② prepare_story_vocab build the allowed vocabulary package
-  ③ write a 180–400 word English-only story (target words bolded)
-  ④ audit_story         commit only if the audit passes; rewrite at most twice
-  ⑤ commit_story        save story + mark usage + open feedback phase      → WAITING_FEEDBACK
-  ⑥ apply_feedback      update FSRS only after the user reports            → WAITING_WORD_CONFIRMATION / IDLE
-  ⑦ write_learning_words add out-of-range discovered words only after the user confirms
+  ② build_context       assemble style + plot + facts + current state + targets
+  ③ prepare_story_vocab build the allowed vocabulary package
+  ④ write a 300–500 word English-only story (target words bolded, dramatic structure)
+  ⑤ audit_story         commit only if the audit passes; rewrite at most twice
+  ⑥ commit_story        save story + mark usage + advance storyline/ledger → WAITING_FEEDBACK
+  ⑦ apply_feedback      update FSRS only after the user reports            → WAITING_WORD_CONFIRMATION / IDLE
+  ⑧ write_learning_words add out-of-range discovered words only after the user confirms
 ```
 
 | Tool | Script | Action | When |
 |---|---|---|---|
 | `engstory_select_targets` | pick.py | pick targets, open a batch | start of each round |
+| `engstory_build_context` | context.py | assemble the bounded writing-context package | before writing |
 | `engstory_prepare_story_vocab` | vocab_distill.py | build the allowed vocabulary package | before writing |
 | `engstory_audit_story` | story_audit.py | read-only audit | after writing |
-| `engstory_commit_story` | story_audit.py + mark.py | save only if audit passes + mark usage | after audit passes |
+| `engstory_commit_story` | story_audit.py + mark.py | save only if audit passes + mark usage + advance storyline/ledger | after audit passes |
 | `engstory_apply_feedback` | feedback.py | update FSRS memory state | after user reports |
 | `engstory_write_learning_words` | add.py | write new words | after explicit confirmation |
+| `engstory_extract_style` | style.py | extract a candidate style (no write) | on reference fragments |
+| `engstory_confirm_style` | style.py | persist a confirmed style profile | after user confirms |
 
 ## Data Files
 
@@ -190,6 +203,15 @@ Polysemous words are split into independent entries by `word|gloss` (e.g. `blue|
 
 Defaults to `state.json` beside the learning vocabulary (`ENGSTORY_STATE` overridable); stories default to `stories/` beside the vocabulary.
 
+### Long-form memory files (all optional, all beside the vocabulary)
+
+| File | Purpose | Env override |
+|---|---|---|
+| `storyline.json` | continuous state: premise / current chapter / open threads / chapter goal / last consequence / recap / last ending | `ENGSTORY_STORYLINE` |
+| `style-profile.json` | style profile (dimensions / must-do / avoid / confidence) | `ENGSTORY_STYLE` |
+| `plot-outline.json` | volume / story-arc outline (core thread / end state / arcs / permanent facts) | `ENGSTORY_OUTLINE` |
+| `chapter-ledger.jsonl` | per-chapter fact ledger (facts / character changes / threads / consequences) | `ENGSTORY_LEDGER` |
+
 ## FSRS Notes
 
 - Memory state is computed by [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs) (MIT), the same algorithm family as Anki's FSRS.
@@ -208,6 +230,10 @@ Defaults to `state.json` beside the learning vocabulary (`ENGSTORY_STATE` overri
 | `ENGSTORY_RANGE` | `./range_vocab.json` | range vocabulary path |
 | `ENGSTORY_STATE` | `state.json` beside the vocabulary | batch state file |
 | `ENGSTORY_FSRS` | bundled `vendor/` | fsrs dependency directory |
+| `ENGSTORY_STORYLINE` | `storyline.json` beside the vocabulary | continuous storyline state |
+| `ENGSTORY_STYLE` | `style-profile.json` beside the vocabulary | style profile |
+| `ENGSTORY_OUTLINE` | `plot-outline.json` beside the vocabulary | volume / story-arc outline |
+| `ENGSTORY_LEDGER` | `chapter-ledger.jsonl` beside the vocabulary | chapter fact ledger |
 
 ## License
 

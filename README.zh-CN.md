@@ -15,6 +15,10 @@
 - **FSRS 记忆调度**：内置 [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs)（Anki 同款间隔重复算法），每个词独立维护 `难度 / 稳定性 / 下次到期`。
 - **遗忘分排序**：选词时按当前遗忘分（`(1 - 可提取性) × 100`）实时排序——快忘的词自动排到最前，新词默认 30 分，长期遗忘的「不会」词能插队回炉。
 - **受限词汇写作**：故事中的普通词必须落在「范围词汇库 + 内置功能词 + 明确专名」内，目标词豁免并强制加粗。
+- **分层长篇记忆**：章节事实账本（`chapter-ledger.jsonl`）逐章记录事实 / 人物与关系变化 / 线索变化 / 后果；卷与故事弧总纲（`plot-outline.json`）承载长期方向；内置确定性冲突检测，能标记「哥哥确实来过警局」vs「哥哥从未进过警局」这类矛盾。
+- **可提炼、可确认的风格**：风格配置（`style-profile.json`）含维度 / must-do / avoid / 置信度；候选风格从参考片段 + 读者感受提取，**用户确认后才落盘**（`engstory_extract_style` → `engstory_confirm_style`），绝不自动覆盖。
+- **按需上下文组装**：`engstory_build_context` 把「风格 + 卷/弧总纲 + 事实账本 + 当前状态 + 目标词」合并成一个有界的写作上下文包。
+- **章节戏剧结构**：每章须完成「立即接场 → 本章目标 → 阻力 → 选择 → 后果 → 具体钩子」，并带硬性负面约束（禁止重复天气开场 / 随机新增人物 / 空泛悬念 / 梦境解释等）。
 - **严格顺序闸门**：批次状态机（`TARGETS_SELECTED → WAITING_FEEDBACK → WAITING_WORD_CONFIRMATION → IDLE`）保证流程不可跳步：没有用户反馈不更新记忆，没有用户确认不写新词。
 - **词形归并**：`sought → seek`、`stood → stand`、`blue|蓝色` 多义词独立计数。
 - **指纹去重**：同一篇文本重复标记会被跳过，防止词频虚高。
@@ -28,7 +32,7 @@ openlxl/
 ├── CHANGELOG.md                  # 版本变更记录
 ├── LICENSE                       # MIT 许可
 └── plugins/
-│   └── engstory-tools.mjs        # 6 个确定性工具（注册给 DSH Agent）
+│   └── engstory-tools.mjs        # 9 个确定性工具（注册给 DSH Agent）
 ├── skills/
 │   └── engstory-domain/
 │       ├── SKILL.md              # 领域规则 + 固定输出模板
@@ -37,16 +41,21 @@ openlxl/
 │       ├── 更定频率/SKILL.md     # 子技能：标频（CLI 参考）
 │       ├── 反馈/SKILL.md         # 子技能：报词反馈（CLI 参考）
 │       ├── 写入词汇/SKILL.md     # 子技能：写新词（CLI 参考）
-│       └── scripts/              # 9 个 Python 脚本（纯标准库）
+│       └── scripts/              # 14 个 Python 脚本（纯标准库）
 │           ├── vocab_core.py     #   词库读写 / 词形归并 / FSRS 遗忘分
-│           ├── pick.py           #   选词
+│           ├── pick.py           #   选词（到期驱动四队列）
 │           ├── mark.py           #   标频（使用统计）
 │           ├── feedback.py       #   反馈（更新 FSRS）
 │           ├── add.py            #   写新词
 │           ├── vocab_distill.py  #   生成允许词汇包
 │           ├── story_audit.py    #   故事审计
 │           ├── range_lib.py      #   范围词库 / 功能词白名单
-│           └── state.py          #   批次状态机
+│           ├── state.py          #   批次状态机
+│           ├── storyline.py      #   连载状态（主线/线索/章节/后果）
+│           ├── ledger.py         #   章节事实账本（含冲突检测）
+│           ├── outline.py        #   卷 / 故事弧总纲
+│           ├── style.py          #   风格配置（读/提取/确认/上下文）
+│           └── context.py        #   组装有界写作上下文包
 ├── vendor/                       # vendored 依赖（均为 MIT）
 │   ├── fsrs/                     #   py-fsrs 6.3.1（含其 LICENSE）
 │   └── typing_extensions.py      #   4.16.0
@@ -65,17 +74,17 @@ openlxl/
 
    ```powershell
    # Windows
-   git clone https://github.com/fanxzl/openlxl.git
+   git clone https://github.com/fanxzl/openlxl-dsh.git
    Copy-Item -Recurse .\openlxl "$env:USERPROFILE\.dsh\.agent-presets\openlxl"
    ```
 
    ```bash
    # Linux / macOS
-   git clone https://github.com/fanxzl/openlxl.git
+   git clone https://github.com/fanxzl/openlxl-dsh.git
    cp -r openlxl ~/.dsh/.agent-presets/openlxl
    ```
 
-2. 启动 DSH，新建会话时选择 `openlxl` preset（agent 自动获得 6 个工具 + 领域技能）。
+2. 启动 DSH，新建会话时选择 `openlxl` preset（agent 自动获得 9 个工具 + 领域技能）。
 
 3. 准备两个词库（路径由你自己指定，工具参数或环境变量传入）：
 
@@ -120,22 +129,26 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab $V
 ```
 写故事闭环（严格按顺序）：
   ① select_targets      从学习库选 7 个目标词           → TARGETS_SELECTED
-  ② prepare_story_vocab 生成允许词汇包
-  ③ 写 180–400 词纯英文故事（目标词加粗）
-  ④ audit_story         审计通过才提交，失败最多重写 2 次
-  ⑤ commit_story        保存故事 + 标频 + 打开反馈阶段   → WAITING_FEEDBACK
-  ⑥ apply_feedback      用户报「会/不会」后才更新 FSRS   → WAITING_WORD_CONFIRMATION / IDLE
-  ⑦ write_learning_words 审计发现的范围外词，用户确认后才写入学习库
+  ② build_context       组装 风格+总纲+事实+当前状态+目标词
+  ③ prepare_story_vocab 生成允许词汇包
+  ④ 写 300–500 词纯英文故事（目标词加粗，戏剧结构）
+  ⑤ audit_story         审计通过才提交，失败最多重写 2 次
+  ⑥ commit_story        保存故事 + 标频 + 推进连载/账本 → WAITING_FEEDBACK
+  ⑦ apply_feedback      用户报「会/不会」后才更新 FSRS   → WAITING_WORD_CONFIRMATION / IDLE
+  ⑧ write_learning_words 审计发现的范围外词，用户确认后才写入学习库
 ```
 
 | 工具 | 脚本 | 动作 | 何时触发 |
 |---|---|---|---|
 | `engstory_select_targets` | pick.py | 选目标词，开批次 | 每轮开始 |
+| `engstory_build_context` | context.py | 组装有界写作上下文包 | 写故事前 |
 | `engstory_prepare_story_vocab` | vocab_distill.py | 生成本轮允许词汇包 | 写故事前 |
 | `engstory_audit_story` | story_audit.py | 只读审计 | 写故事后 |
-| `engstory_commit_story` | story_audit.py + mark.py | 审计通过才保存 + 标频 | 审计通过后 |
+| `engstory_commit_story` | story_audit.py + mark.py | 审计通过才保存 + 标频 + 推进连载/账本 | 审计通过后 |
 | `engstory_apply_feedback` | feedback.py | 更新 FSRS 记忆状态 | 用户报完词后 |
 | `engstory_write_learning_words` | add.py | 写入新词 | 用户明确确认后 |
+| `engstory_extract_style` | style.py | 提取候选风格（不落盘） | 有参考片段时 |
+| `engstory_confirm_style` | style.py | 写入确认后的风格配置 | 用户确认后 |
 
 ## 数据文件
 
@@ -188,6 +201,15 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab $V
 
 默认在学习库同目录 `state.json`（`ENGSTORY_STATE` 可改），故事默认存学习库同目录 `stories/`。
 
+### 长篇记忆文件（均可选，默认与词库同目录）
+
+| 文件 | 作用 | 环境变量可改 |
+|---|---|---|
+| `storyline.json` | 连载状态：主线 / 当前章节 / 未解决线索 / 本章目标 / 上章后果 / 前情 / 结尾镜头 | `ENGSTORY_STORYLINE` |
+| `style-profile.json` | 风格配置（维度 / must-do / avoid / 置信度） | `ENGSTORY_STYLE` |
+| `plot-outline.json` | 卷 / 故事弧总纲（核心主线 / 终点 / 卷 / 弧 / 永久事实） | `ENGSTORY_OUTLINE` |
+| `chapter-ledger.jsonl` | 章节事实账本（事实 / 人物与关系变化 / 线索 / 后果） | `ENGSTORY_LEDGER` |
+
 ## FSRS 说明
 
 - 记忆状态用 [py-fsrs 6.3.1](https://github.com/open-spaced-repetition/py-fsrs) 计算（MIT），与 Anki FSRS 生态同算法。
@@ -206,6 +228,10 @@ python scripts/feedback.py --words "abandon 会, coffin 不会" --vocab $V
 | `ENGSTORY_RANGE` | `./range_vocab.json` | 范围词汇库路径 |
 | `ENGSTORY_STATE` | 学习库同目录 `state.json` | 批次状态文件 |
 | `ENGSTORY_FSRS` | 仓库 `vendor/` | fsrs 依赖目录 |
+| `ENGSTORY_STORYLINE` | 学习库同目录 `storyline.json` | 连载状态 |
+| `ENGSTORY_STYLE` | 学习库同目录 `style-profile.json` | 风格配置 |
+| `ENGSTORY_OUTLINE` | 学习库同目录 `plot-outline.json` | 卷 / 故事弧总纲 |
+| `ENGSTORY_LEDGER` | 学习库同目录 `chapter-ledger.jsonl` | 章节事实账本 |
 
 ## 许可
 
