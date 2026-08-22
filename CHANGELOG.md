@@ -2,6 +2,41 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.1.3] - 2026-08-22
+
+### 新增
+
+- **分层剧情记忆**：
+  - 新增 `chapter-ledger.jsonl`（账本 `ledger.py`）：每章结构化保存事实、人物变化、关系变化、线索增删与后果，用于"已发生什么"。
+  - 新增 `plot-outline.json`（总纲 `outline.py`）：卷/故事弧级长期方向（核心主线 / 终点 / 卷 / 弧 / 永久事实 / 禁止项），用于长篇记忆。
+  - 新增**冲突检测**：`ledger` 用"主体内容词重叠 + 否定极性相反"启发式，能标记「哥哥确实来过旧警局」vs「哥哥从未进过警局」这类矛盾（提示级，不自动拦截）。
+- **可提炼风格**：
+  - 新增 `style-profile.json`（`style.py`）：风格配置带维度 / must_do / avoid / 置信度。
+  - 新增 `engstory_extract_style`（从参考片段 + 读者感受生成**候选**风格，不落盘）与 `engstory_confirm_style`（用户确认后才写入）。风格不会自动覆盖。
+- **按需上下文组装**：
+  - 新增 `context.py` + `engstory_build_context`：把风格 + 卷/弧总纲 + 事实账本 + 当前状态 + 目标词组装成一个**有界的写作上下文包**。
+- **连载状态增强（storyline.py）**：
+  - 新增风格 / 角色 / 关系 / 线索 / 本章目标 / 上章后果等字段。
+  - 支持 `--style-profile`、`--characters`、`--open-threads`、`--relationship-state`、`--chapter-goal`、`--consequence`、`--new-threads`、`--resolved-threads` 等参数。
+- **工具从 6 个扩展到 9 个**：新增 `engstory_build_context` / `engstory_extract_style` / `engstory_confirm_style`；`engstory_commit_story` 新增 `obstacle`、`choice`、`story_arc`、`scene_location`、`facts_added`、`facts_confirmed`、`character_changes`、`relationship_changes` 等可选字段，可同步写入账本。
+
+### 修复
+
+- **故事连载 Chapter 1 源起丢失**：滚动 `recap` 超过 5 章时永久保留 Chapter 1（初始因果）+ 最近 4 章，长篇不丢源头。
+- **冷启动主线写死英文**：无激活连载时直接 `advance`，自动以本章摘要作为主线，不再固定为 `A continuous adventure.`。
+- **中文 JSON 乱码**：为 `runPython` 增加 `PYTHONIOENCODING=utf-8`，修复被管道捕获 stdout 时 Python 用 GBK 编码导致中文摘要/线索/角色被 Node 误解码的问题。
+- **`commit_story` 可复用兜底**：`summary` / `next_hook` 缺省时自动从正文末尾提取。
+
+### 变更
+
+- **写作规范升级为章节戏剧结构**：`写故事/SKILL.md` 要求每章完成「立即接场 → 本章目标 → 阻力 → 选择 → 后果 → 具体钩子」6 步，并加入负面约束（禁止重复天气 / 随机加人 / 空泛结尾 / 梦境解释等）。
+- **领域规则补充**：`engstory-domain/SKILL.md` 明确"词汇审计 ≠ 文学审计"，提交前须生成结构化字段（summary / next_hook / chapter_goal / consequence / new_threads / resolved_threads）。
+
+### 数据文件
+
+- 词库、范围库、故事、状态、连载、风格、总纲、账本都是用户的持久学习数据，位于 preset 之外。
+- 默认与词库同目录：`state.json`、`storyline.json`、`style-profile.json`、`plot-outline.json`、`chapter-ledger.jsonl`、`stories/`。
+
 ## [0.1.2] - 2026-08-16
 
 ### 修复
